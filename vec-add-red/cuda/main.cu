@@ -5,7 +5,7 @@ template <typename scalar>
 __global__ void vecRedAdd(const scalar* vec, scalar* sum, size_t N) {
   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  __shared__ float blockSum;
+  __shared__ double blockSum;
   blockSum = 0.0f;
   __syncthreads();
 
@@ -42,34 +42,34 @@ scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
 
 int main() {
   size_t N = 1<<10;
-  float* hvec = new float[N];
+  double* hvec = new double[N];
 
-  /* Random floats between 0-1*/
-  float randmax = (float)RAND_MAX;
+  /* Random doubles between 0-1*/
+  double randmax = (double)RAND_MAX;
   for (size_t i = 0; i < N; ++i) {
     hvec[i] = rand() / randmax;
   }
-  float* dvec = initialize_device_vector(N, hvec);
+  double* dvec = initialize_device_vector(N, hvec);
 
   size_t block_size = 256;
   size_t grid_size = (N + (block_size - 1)) / block_size;
 
-  float* hsum = new float[1];
+  double* hsum = new double[1];
   *hsum = 0.0f;
-  float* dsum = initialize_device_vector(1, hsum);
+  double* dsum = initialize_device_vector(1, hsum);
 
   vecRedAdd<<<grid_size, block_size>>>(dvec, dsum, N);
-  cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
+  cudaMemcpy(hsum, dsum, (sizeof(double))*1, cudaMemcpyDeviceToHost);
   printf("Device reduction equals %f\n", *hsum);
 
-  float hsum_test = 0.0f;
+  double hsum_test = 0.0f;
   hostVecRedAdd(hvec, &hsum_test, N);
   printf("Host reduction equals %f\n", hsum_test);
 
 
   // Confirm that CPU and GPU got the same answer
-  float diff = fabs(*hsum - hsum_test);
-  float eps = 1e-5f;
+  double diff = fabs(*hsum - hsum_test);
+  double eps = 1e-5f;
   if (diff < eps)
   {
       printf("CPU and GPU answers match\n");
