@@ -3,6 +3,16 @@
 
 template <typename scalar>
 __global__ void vecRedAdd(const scalar* vec, scalar* sum, size_t N) {
+  size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  __shared__ float blockSum;
+  blockSum = 0.0f;
+
+  if (idx < N) {
+    atomicAdd(&blockSum, vec[idx]);
+  }
+
+  atomicAdd(sum, blockSum);
 }
 
 template <typename scalar>
