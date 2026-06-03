@@ -1,12 +1,15 @@
 #include <cuda_runtime.h>
 #include <cstdio>
+#include <chrono>
 
 template <typename scalar>
 __global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_t N) {
   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ float blockSum;
-  blockSum = 0.0f;
+  if (threadIdx.x == 0) {
+    blockSum = 0.0f;
+  }
   __syncthreads();
 
   if (idx < N) {
@@ -63,8 +66,11 @@ int main() {
   printf("%-70s %f\n", "Device reduction using vecRedAdd_1atomicPerThread kernel equals", *hsum);
 
   float hsum_test = 0.0f;
+  auto t0 = std::chrono::high_resolution_clock::now();
   hostVecRedAdd(hvec, &hsum_test, N);
-  printf("%-70s %f\n", "Host reduction equals", hsum_test);
+  auto t1 = std::chrono::high_resolution_clock::now();
+  double host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  printf("%-70s %5.5f %-10s %5.5f\n", "Host reduction ", hsum_test, "Time (ms)", host_ms);
 
 
   // Confirm that CPU and GPU got the same answer
