@@ -44,7 +44,9 @@ void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
 }
 
 template <typename scalar>
-void wrapKernel(size_t grid_size, size_t block_size,
+void wrapKernel(
+    void(*func)(const scalar*, scalar*, size_t),
+    size_t grid_size, size_t block_size,
     const scalar* dvec, size_t N, const scalar reference) {
 
   float* hsum = new float[1];
@@ -55,7 +57,7 @@ void wrapKernel(size_t grid_size, size_t block_size,
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
   cudaEventRecord(start);
-  vecRedAdd_1atomicPerThread<<<grid_size, block_size>>>(dvec, dsum, N);
+  (*func)<<<grid_size, block_size>>>(dvec, dsum, N);
   cudaEventRecord(stop);
   cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
   cudaEventSynchronize(stop);
@@ -95,11 +97,16 @@ int main() {
   hostVecRedAdd(hvec, &hsum_test, N);
   auto t1 = std::chrono::high_resolution_clock::now();
   double host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-  printf("%-70s %5.5f %-10s %5.5f\n", "Host reduction ", hsum_test, ", time (ms)", host_ms);
+  printf("Host\n");
+  printf("====\n");
+  printf("%-10s %5.5f %-10s %5.5f\n", "Result:", hsum_test, "Time [ms]:", host_ms);
 
   size_t block_size = 256;
   size_t grid_size = (N + (block_size - 1)) / block_size;
-  wrapKernel(grid_size, block_size, dvec, N, hsum_test);
+
+  printf("Kernel vecRedAdd_1atomicPerThread\n");
+  printf("=================================\n");
+  wrapKernel(vecRedAdd_1atomicPerThread, grid_size, block_size, dvec, N, hsum_test);
 
   delete[] hvec;
 
