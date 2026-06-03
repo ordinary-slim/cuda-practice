@@ -2,6 +2,10 @@
 #include <cstdio>
 #include <chrono>
 
+static constexpr size_t N = 1<<24;
+static constexpr size_t block_size = 256;
+static constexpr size_t grid_size = (N + (block_size - 1)) / block_size;
+
 template <typename scalar>
 scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
   /* Allocate device vec and copy vector from host to device*/
@@ -37,6 +41,28 @@ __global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_
 }
 
 template <typename scalar>
+__global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
+  // assumes block_size is power of 2
+  size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  __shared__ float partial_sums[block_size];
+  partial_sums[threadIdx.x] = (idx < N) ? vec[idx] : 0;
+  __syncthreads();
+
+  size_t stride = blockDim.x / 2;
+  while (stride > 0) {
+    if (threadIdx.x < stride) {
+      partial_sums[threadIdx.x] += partial_sums[threadIdx.x + stride];
+    }
+    __syncthreads();
+    stride >>= 1;
+  }
+
+  // 1 atomic add per block
+  if (threadIdx.x == 0) atomicAdd(sum, partial_sums[0]);
+}
+
+template <typename scalar>
 void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
   for (size_t i = 0; i < N; ++i) {
     *sum += vec[i];
@@ -46,7 +72,6 @@ void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
 template <typename scalar>
 void wrapKernel(
     void(*func)(const scalar*, scalar*, size_t),
-    size_t grid_size, size_t block_size,
     const scalar* dvec, size_t N, const scalar reference) {
 
   float* hsum = new float[1];
@@ -70,7 +95,7 @@ void wrapKernel(
   float reldiff_tol = 1e-4;
   if (reldiff < reldiff_tol)
   {
-      printf("CPU and GPU answers match within relative tolerance of %e\n", reldiff_tol);
+      printf("CPU and GPU answers match within relative tolerance of %e\n\n", reldiff_tol);
   }
   else
   {
@@ -81,7 +106,6 @@ void wrapKernel(
 }
 
 int main() {
-  size_t N = 1<<24;
   printf("Running reduction of %zu floats\n", N);
   float* hvec = new float[N];
 
@@ -99,14 +123,15 @@ int main() {
   double host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
   printf("Host\n");
   printf("====\n");
-  printf("%-10s %5.5f %-10s %5.5f\n", "Result:", hsum_test, "Time [ms]:", host_ms);
-
-  size_t block_size = 256;
-  size_t grid_size = (N + (block_size - 1)) / block_size;
+  printf("%-10s %5.5f %-10s %5.5f\n\n", "Result:", hsum_test, "Time [ms]:", host_ms);
 
   printf("Kernel vecRedAdd_1atomicPerThread\n");
   printf("=================================\n");
-  wrapKernel(vecRedAdd_1atomicPerThread, grid_size, block_size, dvec, N, hsum_test);
+  wrapKernel(vecRedAdd_1atomicPerThread, dvec, N, hsum_test);
+
+  printf("Kernel vecRedAdd_treeBased\n");
+  printf("============================\n");
+  wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test);
 
   delete[] hvec;
 
