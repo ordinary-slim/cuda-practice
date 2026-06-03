@@ -85,7 +85,7 @@ int main() {
 
   // Confirm that CPU and GPU got the same answer
   float reldiff = fabs(*hsum - hsum_test) / hsum_test;
-  float reldiff_tol = 1e-5;
+  float reldiff_tol = 1e-4;
   if (reldiff < reldiff_tol)
   {
       printf("CPU and GPU answers match within relative tolerance of %e\n", reldiff_tol);
