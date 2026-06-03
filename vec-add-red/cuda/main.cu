@@ -61,9 +61,18 @@ int main() {
   *hsum = 0.0f;
   float* dsum = initialize_device_vector(1, hsum);
 
+
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start);
   vecRedAdd_1atomicPerThread<<<grid_size, block_size>>>(dvec, dsum, N);
+  cudaEventRecord(stop);
   cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
   printf("%-70s %f\n", "Device reduction using vecRedAdd_1atomicPerThread kernel equals", *hsum);
+  cudaEventSynchronize(stop);
+  float ms_device = 0.0f;
+  cudaEventElapsedTime(&ms_device, start, stop);
 
   float hsum_test = 0.0f;
   auto t0 = std::chrono::high_resolution_clock::now();
