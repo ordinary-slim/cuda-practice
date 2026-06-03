@@ -16,7 +16,7 @@ __global__ void vecRedAdd(const scalar* vec, scalar* sum, size_t N) {
 
   // 1 atomic add per block
   if (idx == 0) {
-    atomicAdd(sum, blockSum);
+    atomicAdd(sum, atomicAdd(&blockSum, 0.0f));
   }
 }
 
