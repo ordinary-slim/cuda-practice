@@ -12,6 +12,8 @@ __global__ void vecRedAdd(const scalar* vec, scalar* sum, size_t N) {
     atomicAdd(&blockSum, vec[idx]);
   }
 
+  __syncthreads();
+
   // 1 atomic add per block
   if (idx == 0) {
     atomicAdd(sum, blockSum);
