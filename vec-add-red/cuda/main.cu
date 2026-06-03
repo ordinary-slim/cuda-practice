@@ -72,14 +72,14 @@ int main() {
   cudaEventSynchronize(stop);
   float ms_device = 0.0f;
   cudaEventElapsedTime(&ms_device, start, stop);
-  printf("%-70s %5.5f %-10s %5.5f\n", "Device reduction with kernel vecRedAdd_1atomicPerThread", *hsum, "Time (ms)", ms_device);
+  printf("%-70s %5.5f %-10s %5.5f\n", "Device reduction with kernel vecRedAdd_1atomicPerThread", *hsum, ", time (ms)", ms_device);
 
   float hsum_test = 0.0f;
   auto t0 = std::chrono::high_resolution_clock::now();
   hostVecRedAdd(hvec, &hsum_test, N);
   auto t1 = std::chrono::high_resolution_clock::now();
   double host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-  printf("%-70s %5.5f %-10s %5.5f\n", "Host reduction ", hsum_test, "Time (ms)", host_ms);
+  printf("%-70s %5.5f %-10s %5.5f\n", "Host reduction ", hsum_test, ", time (ms)", host_ms);
 
 
   // Confirm that CPU and GPU got the same answer
