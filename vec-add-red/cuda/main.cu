@@ -60,11 +60,11 @@ int main() {
 
   vecRedAdd_1atomicPerThread<<<grid_size, block_size>>>(dvec, dsum, N);
   cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
-  printf("Device reduction using vecRedAdd_1atomicPerThread kernel equals \t\t\t%f\n", *hsum);
+  printf("%-60s %f\n", "Device reduction using vecRedAdd_1atomicPerThread kernel equals", *hsum);
 
   float hsum_test = 0.0f;
   hostVecRedAdd(hvec, &hsum_test, N);
-  printf("Host reduction equals \t\t\t%f\n", hsum_test);
+  printf("%-60s %f\n", "Host reduction equals", hsum_test);
 
 
   // Confirm that CPU and GPU got the same answer
