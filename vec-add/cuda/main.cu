@@ -2,7 +2,7 @@
 #include <cstdio>
 
 template <typename scalar>
-__global__ void vecAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
+__global__ void vecRedAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
   size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
   if (idx < N) {
     C[idx] = A[idx] + B[idx];
@@ -10,7 +10,7 @@ __global__ void vecAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
 }
 
 template <typename scalar>
-void hostVecAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
+void hostVecRedAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
   for (size_t i = 0; i < N; ++i) {
     C[i] = A[i] + B[i];
   }
@@ -61,10 +61,10 @@ int main() {
   size_t block_size = 256;
   size_t grid_size = (N + (block_size - 1)) / block_size;
 
-  vecAdd<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
+  vecRedAdd<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
   cudaMemcpy(h_C, d_C, sizeof(float)*N, cudaMemcpyDeviceToHost);
 
-  hostVecAdd(h_A, h_B, h_C_test, N);
+  hostVecRedAdd(h_A, h_B, h_C_test, N);
 
 
   // Confirm that CPU and GPU got the same answer

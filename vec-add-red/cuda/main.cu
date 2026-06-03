@@ -43,8 +43,8 @@ int main() {
   float* dsum = initialize_device_vector(1, hsum);
 
   vecRedAdd<<<grid_size, block_size>>>(dvec, dsum, N);
-  cudaMemcpy(hsum, dsum, 1, cudaMemcpyDeviceToHost);
-  printf("Device reduction equals %f\n", *dsum);
+  cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
+  printf("Device reduction equals %f\n", *hsum);
 
   float hsum_test = 0.0f;
   hostVecRedAdd(hvec, &hsum_test, N);
@@ -67,5 +67,6 @@ int main() {
   delete[] hsum;
 
   cudaFree(dvec);
+  cudaFree(dsum);
 }
 
