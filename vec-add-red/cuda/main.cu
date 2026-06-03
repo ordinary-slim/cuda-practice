@@ -44,7 +44,7 @@ scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
 }
 
 int main() {
-  size_t N = 1<<10;
+  size_t N = 1<<24;
   float* hvec = new float[N];
 
   /* Random floats between 0-1*/
