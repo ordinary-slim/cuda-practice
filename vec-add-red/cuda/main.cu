@@ -2,7 +2,7 @@
 #include <cstdio>
 
 template <typename scalar>
-__global__ void vecRedAdd(const scalar* vec, scalar* sum, size_t N) {
+__global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_t N) {
   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ float blockSum;
@@ -58,13 +58,13 @@ int main() {
   *hsum = 0.0f;
   float* dsum = initialize_device_vector(1, hsum);
 
-  vecRedAdd<<<grid_size, block_size>>>(dvec, dsum, N);
+  vecRedAdd_1atomicPerThread<<<grid_size, block_size>>>(dvec, dsum, N);
   cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
-  printf("Device reduction equals %f\n", *hsum);
+  printf("Device reduction using vecRedAdd_1atomicPerThread kernel equals \t\t\t%f\n", *hsum);
 
   float hsum_test = 0.0f;
   hostVecRedAdd(hvec, &hsum_test, N);
-  printf("Host reduction equals %f\n", hsum_test);
+  printf("Host reduction equals \t\t\t%f\n", hsum_test);
 
 
   // Confirm that CPU and GPU got the same answer
