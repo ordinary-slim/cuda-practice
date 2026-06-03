@@ -3,6 +3,18 @@
 #include <chrono>
 
 template <typename scalar>
+scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
+  /* Allocate device vec and copy vector from host to device*/
+  scalar* d_vec = nullptr;
+  size_t numbytes = N*sizeof(scalar);
+  cudaMalloc(&d_vec, numbytes);
+  if (h_vec != nullptr) {
+    cudaMemcpy(d_vec, h_vec, numbytes, cudaMemcpyHostToDevice);
+  }
+  return d_vec;
+}
+
+template <typename scalar>
 __global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_t N) {
   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -32,15 +44,38 @@ void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
 }
 
 template <typename scalar>
-scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
-  /* Allocate device vec and copy vector from host to device*/
-  scalar* d_vec = nullptr;
-  size_t numbytes = N*sizeof(scalar);
-  cudaMalloc(&d_vec, numbytes);
-  if (h_vec != nullptr) {
-    cudaMemcpy(d_vec, h_vec, numbytes, cudaMemcpyHostToDevice);
+void wrapKernel(size_t grid_size, size_t block_size,
+    const scalar* dvec, size_t N, const scalar reference) {
+
+  float* hsum = new float[1];
+  *hsum = 0.0f;
+  float* dsum = initialize_device_vector(1, hsum);
+
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start);
+  vecRedAdd_1atomicPerThread<<<grid_size, block_size>>>(dvec, dsum, N);
+  cudaEventRecord(stop);
+  cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
+  cudaEventSynchronize(stop);
+  float ms_device = 0.0f;
+  cudaEventElapsedTime(&ms_device, start, stop);
+  printf("%-10s %5.5f %-10s %5.5f\n", "Result:", *hsum, "Time [ms]:", ms_device);
+
+  // Confirm that CPU and GPU got the same answer
+  float reldiff = fabs(*hsum - reference) / reference;
+  float reldiff_tol = 1e-4;
+  if (reldiff < reldiff_tol)
+  {
+      printf("CPU and GPU answers match within relative tolerance of %e\n", reldiff_tol);
   }
-  return d_vec;
+  else
+  {
+      printf("Error - CPU and GPU answers do not match\n");
+  }
+  delete[] hsum;
+  cudaFree(dsum);
 }
 
 int main() {
@@ -55,26 +90,6 @@ int main() {
   }
   float* dvec = initialize_device_vector(N, hvec);
 
-  size_t block_size = 256;
-  size_t grid_size = (N + (block_size - 1)) / block_size;
-
-  float* hsum = new float[1];
-  *hsum = 0.0f;
-  float* dsum = initialize_device_vector(1, hsum);
-
-
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start);
-  vecRedAdd_1atomicPerThread<<<grid_size, block_size>>>(dvec, dsum, N);
-  cudaEventRecord(stop);
-  cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
-  cudaEventSynchronize(stop);
-  float ms_device = 0.0f;
-  cudaEventElapsedTime(&ms_device, start, stop);
-  printf("%-70s %5.5f %-10s %5.5f\n", "Device reduction with kernel vecRedAdd_1atomicPerThread", *hsum, ", time (ms)", ms_device);
-
   float hsum_test = 0.0f;
   auto t0 = std::chrono::high_resolution_clock::now();
   hostVecRedAdd(hvec, &hsum_test, N);
@@ -82,23 +97,12 @@ int main() {
   double host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
   printf("%-70s %5.5f %-10s %5.5f\n", "Host reduction ", hsum_test, ", time (ms)", host_ms);
 
-
-  // Confirm that CPU and GPU got the same answer
-  float reldiff = fabs(*hsum - hsum_test) / hsum_test;
-  float reldiff_tol = 1e-4;
-  if (reldiff < reldiff_tol)
-  {
-      printf("CPU and GPU answers match within relative tolerance of %e\n", reldiff_tol);
-  }
-  else
-  {
-      printf("Error - CPU and GPU answers do not match\n");
-  }
+  size_t block_size = 256;
+  size_t grid_size = (N + (block_size - 1)) / block_size;
+  wrapKernel(grid_size, block_size, dvec, N, hsum_test);
 
   delete[] hvec;
-  delete[] hsum;
 
   cudaFree(dvec);
-  cudaFree(dsum);
 }
 
