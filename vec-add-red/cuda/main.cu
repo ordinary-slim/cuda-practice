@@ -117,7 +117,8 @@ void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
 template <typename scalar>
 void wrapKernel(
     void(*func)(const scalar*, scalar*, size_t),
-    const scalar* dvec, size_t N, const scalar reference) {
+    const scalar* dvec, size_t N, const scalar reference,
+    bool verbose = true) {
 
   float* hsum = new float[1];
   *hsum = 0.0f;
@@ -133,14 +134,16 @@ void wrapKernel(
   cudaEventSynchronize(stop);
   float ms_device = 0.0f;
   cudaEventElapsedTime(&ms_device, start, stop);
-  printf("%-10s %5.5f %-10s %5.5f\n", "Result:", *hsum, "Time [ms]:", ms_device);
+  if (verbose)
+    printf("%-10s %5.5f %-10s %5.5f\n", "Result:", *hsum, "Time [ms]:", ms_device);
 
   // Confirm that CPU and GPU got the same answer
   float reldiff = fabs(*hsum - reference) / reference;
   float reldiff_tol = 1e-4;
   if (reldiff < reldiff_tol)
   {
-      printf("CPU and GPU answers match within relative tolerance of %e\n\n", reldiff_tol);
+      if (verbose)
+        printf("CPU and GPU answers match within relative tolerance of %e\n\n", reldiff_tol);
   }
   else
   {
@@ -186,10 +189,12 @@ int main() {
 
     printf("Kernel vecRedAdd_treeBased\n");
     printf("----------------------------\n");
+    wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
     wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test);
 
     printf("Kernel vecRedAdd_intraWarpRegOps\n");
     printf("--------------------------------\n");
+    wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
     wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test);
   }
 
