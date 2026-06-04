@@ -182,7 +182,7 @@ int main() {
     grid_dim = dim3(grid_size);
 
     printf("\n\n=========\n\n");
-    printf("Block dim: (%d, %d) Grid dim: (%d)\n", block_dim.x, block_dim.y, grid_dim.x);
+    printf("Number of blocks per SM: %zu\n", blocksPerSM);
 
     printf("Kernel vecRedAdd_treeBased\n");
     printf("----------------------------\n");
