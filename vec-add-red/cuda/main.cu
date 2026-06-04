@@ -6,7 +6,7 @@
 
 static constexpr size_t N = 1<<24;
 static constexpr size_t warp_size = 32;
-static constexpr size_t block_size = 1024;
+static constexpr size_t block_size = 512;
 static constexpr size_t grid_size = (N + (block_size - 1)) / block_size;
 constexpr dim3 block_dim(warp_size, block_size/warp_size);
 constexpr dim3 grid_dim(grid_size);
@@ -101,7 +101,7 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
         val += __shfl_down_sync(0xffffffff, val, offset); // full mask
   }
 
-  // Step 3: First thread of first block holds blockwise result
+  // Step 3: First thread of first warp holds blockwise result
   // and reduces it w global val
   if (threadIdx.x == 0 && threadIdx.y == 0) atomicAdd(sum, val);
 }
