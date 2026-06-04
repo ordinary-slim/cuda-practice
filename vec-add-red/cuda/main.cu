@@ -115,7 +115,7 @@ void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
 }
 
 template <typename scalar>
-void wrapKernel(
+float wrapKernel(
     void(*func)(const scalar*, scalar*, size_t),
     const scalar* dvec, size_t N, const scalar reference,
     bool verbose = true) {
@@ -151,6 +151,8 @@ void wrapKernel(
   }
   delete[] hsum;
   cudaFree(dsum);
+
+  return ms_device;
 }
 
 int main() {
@@ -177,6 +179,8 @@ int main() {
   // printf("--------------------------------=\n");
   // wrapKernel(vecRedAdd_1atomicPerThread, dvec, N, hsum_test);
 
+  size_t runs_per_config = 10;
+
   for (size_t blocksPerSM = 8; blocksPerSM > 0; blocksPerSM >>=1) {
 
     block_size = 1024 / blocksPerSM;
@@ -185,17 +189,25 @@ int main() {
     grid_dim = dim3(grid_size);
 
     printf("\n\n=========\n\n");
-    printf("Number of blocks per SM: %zu\n", blocksPerSM);
+    printf("BLOCK SIZE: %zu\n", block_size);
 
     printf("Kernel vecRedAdd_treeBased\n");
     printf("----------------------------\n");
-    wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
-    wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test);
+    float avg_time = 0.0f;
+    for (int i = 0; i < runs_per_config; ++i)
+      avg_time += wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
+
+    avg_time /= runs_per_config;
+    printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
 
     printf("Kernel vecRedAdd_intraWarpRegOps\n");
     printf("--------------------------------\n");
-    wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
-    wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test);
+    avg_time = 0.0f;
+    for (int i = 0; i < runs_per_config; ++i)
+      avg_time += wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
+
+    avg_time /= runs_per_config;
+    printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
   }
 
   delete[] hvec;
