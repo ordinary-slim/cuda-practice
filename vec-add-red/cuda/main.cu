@@ -92,11 +92,11 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
   // Step 2: Obtain blockwise reduction
   // Share results across block
   __shared__ scalar warp_sums[warp_size];
-  if (threadIdx.x == 0) warp_sums[threadIdx.y] = (threadIdx.y < blockDim.y) ? val : 0;
+  if (threadIdx.x == 0) warp_sums[threadIdx.y] = val;
   __syncthreads();
   // First warp finishes reduction
   if (threadIdx.y == 0) {
-    val =  warp_sums[threadIdx.x];
+    val = (threadIdx.x < blockDim.y) ? warp_sums[threadIdx.x] : 0;
     for (int offset = warp_size/2; offset > 0; offset /= 2)
         val += __shfl_down_sync(0xffffffff, val, offset); // full mask
   }
