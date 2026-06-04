@@ -52,8 +52,8 @@ __global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_
 template <typename scalar>
 __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   // assumes block_size is power of 2
-  size_t warp_idx = threadIdx.x; // in block
-  size_t thread_idx_in_block = warp_idx * warp_size + threadIdx.y;
+  size_t warp_idx = threadIdx.y; // in block
+  size_t thread_idx_in_block = warp_idx * warp_size + threadIdx.x;
   size_t global_thread_idx = block_size * blockIdx.x + thread_idx_in_block;
 
   __shared__ scalar partial_sums[block_size];
@@ -73,18 +73,22 @@ __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   if (thread_idx_in_block == 0) atomicAdd(sum, partial_sums[0]);
 }
 
-// template <typename scalar>
-// __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t N) {
-//   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
-//
-//   __shared__ scalar warp_sums[32];
-//
-//   // TODO 1: warp_sums[0] = reduction of 0-31
-//   //         warp_sums[1] = reduction of 32-63
-//   //         ...
-//   // TODO 2: The first index of each warp adds its warp result
-//   if (threadIdx.x % 32 == 0) atomicAdd(sum, partial_sums[0]);
-// }
+template <typename scalar>
+__global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t N) {
+  /* 1d grid, 2D block
+   * blockDim.x = # threads per warp
+   * blockDim.y = # warps per block */
+  size_t thread_idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
+  size_t global_thread_idx = (blockDim.x * blockDim.y) * blockIdx.x + thread_idx_in_block;
+
+  __shared__ scalar warp_sums[32];
+
+  // TODO 1: warp_sums[0] = reduction of 0-31
+  //         warp_sums[1] = reduction of 32-63
+  //         ...
+  // TODO 2: The first index of each warp adds its warp result
+  // if (threadIdx.x % 32 == 0) atomicAdd(sum, partial_sums[0]);
+}
 
 template <typename scalar>
 void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
