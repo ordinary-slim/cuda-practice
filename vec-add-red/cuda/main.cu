@@ -83,19 +83,27 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
   size_t thread_idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
   size_t global_thread_idx = (blockDim.x * blockDim.y) * blockIdx.x + thread_idx_in_block;
 
-  // __shared__ scalar warp_sums[warp_size];
-  //
-  // if (threadIdx.x == 0) warp_sums[threadIdx.y] = (scalar)0;
-  // __syncthreads();
-
   // Step 1: Warp level tree reduction using __shfl_down_sync
   // first thread of each warp ends up with warp reduction
   scalar val = (global_thread_idx < N) ? vec[global_thread_idx] : 0;
   for (int offset = warp_size/2; offset > 0; offset /= 2)
       val += __shfl_down_sync(0xffffffff, val, offset); // full mask
 
-  // Step 2: The first index of each warp adds its warp result
-  if (threadIdx.x == 0) atomicAdd(sum, val);
+  // Step 2: Obtain blockwise reduction
+  // Share results across block
+  __shared__ scalar warp_sums[warp_size];
+  if (threadIdx.x == 0) warp_sums[threadIdx.y] = val;
+  __syncthreads();
+  // First warp finishes reduction
+  if (threadIdx.y == 0) {
+    val =  warp_sums[threadIdx.x];
+    for (int offset = warp_size/2; offset > 0; offset /= 2)
+        val += __shfl_down_sync(0xffffffff, val, offset); // full mask
+  }
+
+  // Step 3: First thread of first block holds blockwise result
+  // and reduces it w global val
+  if (threadIdx.x == 0 && threadIdx.y == 0) atomicAdd(sum, val);
 }
 
 template <typename scalar>
