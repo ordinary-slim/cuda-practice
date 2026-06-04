@@ -60,7 +60,7 @@ __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   partial_sums[thread_idx_in_block] = (global_thread_idx < N) ? vec[global_thread_idx] : 0;
   __syncthreads();
 
-  size_t stride = blockDim.x / 2;
+  size_t stride = block_size / 2;
   while (stride > 0) {
     if (thread_idx_in_block < stride) {
       partial_sums[thread_idx_in_block] += partial_sums[thread_idx_in_block + stride];
