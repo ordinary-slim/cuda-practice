@@ -3,8 +3,11 @@
 #include <chrono>
 
 static constexpr size_t N = 1<<24;
-static constexpr size_t block_size = 256;
+static constexpr size_t warp_size = 32;
+static constexpr size_t block_size = 1024;
 static constexpr size_t grid_size = (N + (block_size - 1)) / block_size;
+constexpr dim3 block_dim(warp_size, block_size/warp_size);
+constexpr dim3 grid_dim(grid_size);
 
 template <typename scalar>
 scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
@@ -20,22 +23,28 @@ scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
 
 template <typename scalar>
 __global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_t N) {
-  size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+  /* Threads of each block perform an atomicAdd on a shared float, then first thread
+   * of block sums its resul */
+  // blcok dim is (32, block_size / 32)
+  size_t warp_idx = threadIdx.y;
+  size_t thread_idx = threadIdx.x;
+  size_t block_thread_idx = warp_idx * warp_size + thread_idx;
+  size_t global_thread_idx = (blockDim.x * blockDim.y) * blockIdx.x + block_thread_idx;
 
   __shared__ float blockSum;
-  if (threadIdx.x == 0) {
-    blockSum = 0.0f;
-  }
+
+  if (block_thread_idx) blockSum = 0.0f;
+
   __syncthreads();
 
-  if (idx < N) {
-    atomicAdd(&blockSum, vec[idx]);
+  if (global_thread_idx < N) {
+    atomicAdd(&blockSum, vec[global_thread_idx]);
   }
 
   __syncthreads();
 
   // 1 atomic add per block
-  if (threadIdx.x == 0) {
+  if (block_thread_idx == 0) {
     atomicAdd(sum, blockSum);
   }
 }
@@ -45,7 +54,7 @@ __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   // assumes block_size is power of 2
   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  __shared__ float partial_sums[block_size];
+  __shared__ scalar partial_sums[block_size];
   partial_sums[threadIdx.x] = (idx < N) ? vec[idx] : 0;
   __syncthreads();
 
@@ -61,6 +70,19 @@ __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   // 1 atomic add per block
   if (threadIdx.x == 0) atomicAdd(sum, partial_sums[0]);
 }
+
+// template <typename scalar>
+// __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t N) {
+//   size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+//
+//   __shared__ scalar warp_sums[32];
+//
+//   // TODO 1: warp_sums[0] = reduction of 0-31
+//   //         warp_sums[1] = reduction of 32-63
+//   //         ...
+//   // TODO 2: The first index of each warp adds its warp result
+//   if (threadIdx.x % 32 == 0) atomicAdd(sum, partial_sums[0]);
+// }
 
 template <typename scalar>
 void hostVecRedAdd(const scalar* vec, scalar* sum, size_t N) {
@@ -82,7 +104,7 @@ void wrapKernel(
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
   cudaEventRecord(start);
-  (*func)<<<grid_size, block_size>>>(dvec, dsum, N);
+  (*func)<<<grid_dim, block_dim>>>(dvec, dsum, N);
   cudaEventRecord(stop);
   cudaMemcpy(hsum, dsum, (sizeof(float))*1, cudaMemcpyDeviceToHost);
   cudaEventSynchronize(stop);
@@ -137,4 +159,3 @@ int main() {
 
   cudaFree(dvec);
 }
-
