@@ -52,23 +52,25 @@ __global__ void vecRedAdd_1atomicPerThread(const scalar* vec, scalar* sum, size_
 template <typename scalar>
 __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   // assumes block_size is power of 2
-  size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+  size_t warp_idx = threadIdx.x; // in block
+  size_t thread_idx_in_block = warp_idx * warp_size + threadIdx.y;
+  size_t global_thread_idx = block_size * blockIdx.x + thread_idx_in_block;
 
   __shared__ scalar partial_sums[block_size];
-  partial_sums[threadIdx.x] = (idx < N) ? vec[idx] : 0;
+  partial_sums[thread_idx_in_block] = (global_thread_idx < N) ? vec[global_thread_idx] : 0;
   __syncthreads();
 
   size_t stride = blockDim.x / 2;
   while (stride > 0) {
-    if (threadIdx.x < stride) {
-      partial_sums[threadIdx.x] += partial_sums[threadIdx.x + stride];
+    if (thread_idx_in_block < stride) {
+      partial_sums[thread_idx_in_block] += partial_sums[thread_idx_in_block + stride];
     }
     __syncthreads();
     stride >>= 1;
   }
 
   // 1 atomic add per block
-  if (threadIdx.x == 0) atomicAdd(sum, partial_sums[0]);
+  if (thread_idx_in_block == 0) atomicAdd(sum, partial_sums[0]);
 }
 
 // template <typename scalar>
