@@ -6,10 +6,10 @@
 
 static constexpr size_t N = 1<<24;
 static constexpr size_t warp_size = 32;
-static constexpr size_t block_size = 512;
-static constexpr size_t grid_size = (N + (block_size - 1)) / block_size;
-constexpr dim3 block_dim(warp_size, block_size/warp_size);
-constexpr dim3 grid_dim(grid_size);
+static size_t block_size;
+static size_t grid_size;
+static dim3 block_dim;
+static dim3 grid_dim;
 
 template <typename scalar>
 scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
@@ -56,9 +56,10 @@ __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
   // assumes block_size is power of 2
   size_t warp_idx = threadIdx.y; // in block
   size_t thread_idx_in_block = warp_idx * warp_size + threadIdx.x;
+  size_t block_size = (blockDim.x * blockDim.y);
   size_t global_thread_idx = block_size * blockIdx.x + thread_idx_in_block;
 
-  __shared__ scalar partial_sums[block_size];
+  __shared__ scalar partial_sums[1024];
   partial_sums[thread_idx_in_block] = (global_thread_idx < N) ? vec[global_thread_idx] : 0;
   __syncthreads();
 
@@ -166,20 +167,31 @@ int main() {
   auto t1 = std::chrono::high_resolution_clock::now();
   double host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
   printf("Host\n");
-  printf("====\n");
+  printf("----\n");
   printf("%-10s %5.5f %-10s %5.5f\n\n", "Result:", hsum_test, "Time [ms]:", host_ms);
 
-  printf("Kernel vecRedAdd_1atomicPerThread\n");
-  printf("=================================\n");
-  wrapKernel(vecRedAdd_1atomicPerThread, dvec, N, hsum_test);
+  // printf("Kernel vecRedAdd_1atomicPerThread\n");
+  // printf("--------------------------------=\n");
+  // wrapKernel(vecRedAdd_1atomicPerThread, dvec, N, hsum_test);
 
-  printf("Kernel vecRedAdd_treeBased\n");
-  printf("============================\n");
-  wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test);
+  for (size_t blocksPerSM = 8; blocksPerSM > 0; blocksPerSM >>=1) {
 
-  printf("Kernel vecRedAdd_intraWarpRegOps\n");
-  printf("================================\n");
-  wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test);
+    block_size = 1024 / blocksPerSM;
+    grid_size = (N + (block_size - 1)) / block_size;
+    block_dim = dim3(warp_size, block_size/warp_size);
+    grid_dim = dim3(grid_size);
+
+    printf("\n\n=========\n\n");
+    printf("Block dim: (%d, %d) Grid dim: (%d)\n", block_dim.x, block_dim.y, grid_dim.x);
+
+    printf("Kernel vecRedAdd_treeBased\n");
+    printf("----------------------------\n");
+    wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test);
+
+    printf("Kernel vecRedAdd_intraWarpRegOps\n");
+    printf("--------------------------------\n");
+    wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test);
+  }
 
   delete[] hvec;
 
