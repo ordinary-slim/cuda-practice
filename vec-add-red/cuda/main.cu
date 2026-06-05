@@ -187,9 +187,9 @@ int main() {
   size_t blocksPerSM = 1;
   block_size = 1024 / blocksPerSM;
   printf("BLOCK SIZE: %zu\n", block_size);
-  size_t els_per_thread = 2;
+  size_t els_per_thread = 8;
 
-  for (; els_per_thread > 0; els_per_thread <<=1) {
+  for (; els_per_thread > 0; els_per_thread >>=1) {
     grid_size = (N + ((els_per_thread*block_size) - 1)) / (els_per_thread*block_size);
     block_dim = dim3(warp_size, block_size/warp_size);
     grid_dim = dim3(grid_size);
