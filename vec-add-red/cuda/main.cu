@@ -2,8 +2,6 @@
 #include <cstdio>
 #include <chrono>
 
-#define FULL_MASK 
-
 static constexpr size_t N = 1<<24;
 static constexpr size_t warp_size = 32;
 static size_t block_size;
@@ -78,15 +76,24 @@ __global__ void vecRedAdd_treeBased(const scalar* vec, scalar* sum, size_t N) {
 
 template <typename scalar>
 __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t N) {
-  /* 1d grid, 2D block
+  /* 1D grid, 2D block
    * threadIdx.x = thread idx in warp
    * threadIdx.y = warp idx in block */
   size_t thread_idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
-  size_t global_thread_idx = (blockDim.x * blockDim.y) * blockIdx.x + thread_idx_in_block;
+  size_t block_size = (blockDim.x * blockDim.y);
+  size_t global_thread_idx =  block_size * blockIdx.x + thread_idx_in_block;
+  size_t els_per_thread =  (N + (gridDim.x * block_size) - 1) / (gridDim.x * block_size);
 
   // Step 1: Warp level tree reduction using __shfl_down_sync
   // first thread of each warp ends up with warp reduction
-  scalar val = (global_thread_idx < N) ? vec[global_thread_idx] : 0;
+  scalar val = 0;
+  size_t stride = N / els_per_thread;
+  for (size_t i = 0; i < els_per_thread; ++i) {
+    size_t idx = global_thread_idx + i*stride;
+    if (idx < N) {
+      val += vec[idx];
+    }
+  }
   for (int offset = warp_size/2; offset > 0; offset /= 2)
       val += __shfl_down_sync(0xffffffff, val, offset); // full mask
 
@@ -181,33 +188,36 @@ int main() {
 
   size_t runs_per_config = 10;
 
-  for (size_t blocksPerSM = 8; blocksPerSM > 0; blocksPerSM >>=1) {
+  size_t blocksPerSM = 1;
+  size_t els_per_thread = 1;
+  // for (size_t els_per_thread = 1; els_per_thread < 8; els_per_thread <<=1) {
 
-    block_size = 1024 / blocksPerSM;
-    grid_size = (N + (block_size - 1)) / block_size;
-    block_dim = dim3(warp_size, block_size/warp_size);
-    grid_dim = dim3(grid_size);
+  {
+  block_size = 1024 / blocksPerSM;
+  grid_size = (N + ((els_per_thread*block_size) - 1)) / (els_per_thread*block_size);
+  block_dim = dim3(warp_size, block_size/warp_size);
+  grid_dim = dim3(grid_size);
+  float avg_time = 0.0f;
 
-    printf("\n\n=========\n\n");
-    printf("BLOCK SIZE: %zu\n", block_size);
+  printf("\n\n=========\n\n");
+  printf("BLOCK SIZE: %zu\n", block_size);
 
-    printf("Kernel vecRedAdd_treeBased\n");
-    printf("----------------------------\n");
-    float avg_time = 0.0f;
-    for (int i = 0; i < runs_per_config; ++i)
-      avg_time += wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
+  // printf("Kernel vecRedAdd_treeBased\n");
+  // printf("----------------------------\n");
+  // for (int i = 0; i < runs_per_config; ++i)
+  //   avg_time += wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
 
-    avg_time /= runs_per_config;
-    printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
+  // avg_time /= runs_per_config;
+  // printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
 
-    printf("Kernel vecRedAdd_intraWarpRegOps\n");
-    printf("--------------------------------\n");
-    avg_time = 0.0f;
-    for (int i = 0; i < runs_per_config; ++i)
-      avg_time += wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
+  printf("Kernel vecRedAdd_intraWarpRegOps\n");
+  printf("--------------------------------\n");
+  avg_time = 0.0f;
+  for (int i = 0; i < runs_per_config; ++i)
+    avg_time += wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
 
-    avg_time /= runs_per_config;
-    printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
+  avg_time /= runs_per_config;
+  printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
   }
 
   delete[] hvec;
