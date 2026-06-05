@@ -89,7 +89,7 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
   // first thread of each warp ends up with warp reduction
   scalar val = 0;
   for (size_t i = 0; i < els_per_thread; ++i) {
-    size_t idx = global_thread_idx + i * warp_size;
+    size_t idx = els_per_thread * global_thread_idx + i * warp_size;
     if (idx < N) val += vec[idx + i * warp_size];
   }
   for (int offset = warp_size/2; offset > 0; offset /= 2)
