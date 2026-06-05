@@ -92,7 +92,7 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
   for (size_t i = 0; i < els_per_thread; ++i) {
     size_t idx = global_thread_idx
                   + ((els_per_thread - 1) * global_warp_idx + i) * warp_size;
-    if (idx < N) val += vec[idx + i * warp_size];
+    if (idx < N) val += vec[idx];
   }
   for (int offset = warp_size/2; offset > 0; offset /= 2)
       val += __shfl_down_sync(0xffffffff, val, offset); // full mask
