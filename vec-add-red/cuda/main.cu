@@ -187,7 +187,7 @@ int main() {
   size_t blocksPerSM = 1;
   block_size = 1024 / blocksPerSM;
   printf("BLOCK SIZE: %zu\n", block_size);
-  size_t els_per_thread = 8;
+  size_t els_per_thread = 32;
 
   for (; els_per_thread > 0; els_per_thread >>=1) {
     grid_size = (N + ((els_per_thread*block_size) - 1)) / (els_per_thread*block_size);
