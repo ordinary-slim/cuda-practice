@@ -189,8 +189,18 @@ int main() {
   size_t runs_per_config = 10;
 
   size_t blocksPerSM = 1;
-  size_t els_per_thread = 1;
-  // for (size_t els_per_thread = 1; els_per_thread < 8; els_per_thread <<=1) {
+  size_t els_per_thread = 2;
+
+  bool normal_run = true;
+
+  if (normal_run) {
+    block_size = 1024 / blocksPerSM;
+    grid_size = (N + ((els_per_thread*block_size) - 1)) / (els_per_thread*block_size);
+    block_dim = dim3(warp_size, block_size/warp_size);
+    grid_dim = dim3(grid_size);
+    wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test);
+    return 0;
+  }
 
   {
   block_size = 1024 / blocksPerSM;
