@@ -82,17 +82,11 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
   size_t thread_idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
   size_t block_size = (blockDim.x * blockDim.y);
   size_t global_thread_idx =  block_size * blockIdx.x + thread_idx_in_block;
-  size_t els_per_thread =  (N + (gridDim.x * block_size) - 1) / (gridDim.x * block_size);
+  size_t tot_num_threads =  gridDim.x * block_size;
 
-  // Step 1: Warp level tree reduction using __shfl_down_sync
-  // first thread of each warp ends up with warp reduction
   scalar val = 0;
-  size_t stride = N / els_per_thread;
-  for (size_t i = 0; i < els_per_thread; ++i) {
-    size_t idx = global_thread_idx + i*stride;
-    if (idx < N) {
-      val += vec[idx];
-    }
+  for (size_t idx = global_thread_idx; idx < N; idx+=tot_num_threads) {
+    val += vec[idx];
   }
   for (int offset = warp_size/2; offset > 0; offset /= 2)
       val += __shfl_down_sync(0xffffffff, val, offset); // full mask
