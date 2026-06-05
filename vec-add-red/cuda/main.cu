@@ -84,6 +84,8 @@ __global__ void vecRedAdd_intraWarpRegOps(const scalar* vec, scalar* sum, size_t
   size_t global_thread_idx =  block_size * blockIdx.x + thread_idx_in_block;
   size_t tot_num_threads =  gridDim.x * block_size;
 
+  // Step 1: Warp level tree reduction using __shfl_down_sync
+  // first thread of each warp ends up with warp reduction
   scalar val = 0;
   for (size_t idx = global_thread_idx; idx < N; idx+=tot_num_threads) {
     val += vec[idx];
@@ -183,45 +185,35 @@ int main() {
   size_t runs_per_config = 10;
 
   size_t blocksPerSM = 1;
-  size_t els_per_thread = 2;
+  printf("BLOCK SIZE: %zu\n", block_size);
+  size_t els_per_thread = 8;
 
-  bool normal_run = true;
-
-  if (normal_run) {
+  for (; els_per_thread > 0; els_per_thread <<=1) {
     block_size = 1024 / blocksPerSM;
     grid_size = (N + ((els_per_thread*block_size) - 1)) / (els_per_thread*block_size);
     block_dim = dim3(warp_size, block_size/warp_size);
     grid_dim = dim3(grid_size);
-    wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test);
-    return 0;
-  }
+    float avg_time = 0.0f;
 
-  {
-  block_size = 1024 / blocksPerSM;
-  grid_size = (N + ((els_per_thread*block_size) - 1)) / (els_per_thread*block_size);
-  block_dim = dim3(warp_size, block_size/warp_size);
-  grid_dim = dim3(grid_size);
-  float avg_time = 0.0f;
+    printf("\n\n=========\n\n");
+    printf("Elements per thread: %zu\n", els_per_thread);
 
-  printf("\n\n=========\n\n");
-  printf("BLOCK SIZE: %zu\n", block_size);
+    // printf("Kernel vecRedAdd_treeBased\n");
+    // printf("----------------------------\n");
+    // for (int i = 0; i < runs_per_config; ++i)
+    //   avg_time += wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
 
-  // printf("Kernel vecRedAdd_treeBased\n");
-  // printf("----------------------------\n");
-  // for (int i = 0; i < runs_per_config; ++i)
-  //   avg_time += wrapKernel(vecRedAdd_treeBased, dvec, N, hsum_test, false);
+    // avg_time /= runs_per_config;
+    // printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
 
-  // avg_time /= runs_per_config;
-  // printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
+    printf("Kernel vecRedAdd_intraWarpRegOps\n");
+    printf("--------------------------------\n");
+    avg_time = 0.0f;
+    for (int i = 0; i < runs_per_config; ++i)
+      avg_time += wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
 
-  printf("Kernel vecRedAdd_intraWarpRegOps\n");
-  printf("--------------------------------\n");
-  avg_time = 0.0f;
-  for (int i = 0; i < runs_per_config; ++i)
-    avg_time += wrapKernel(vecRedAdd_intraWarpRegOps, dvec, N, hsum_test, false);
-
-  avg_time /= runs_per_config;
-  printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
+    avg_time /= runs_per_config;
+    printf("Average time over %zu runs: %5.5f ms\n\n", runs_per_config, avg_time);
   }
 
   delete[] hvec;
