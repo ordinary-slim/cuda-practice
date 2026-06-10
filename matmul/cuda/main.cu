@@ -1,6 +1,8 @@
 #include <cuda_runtime.h>
 #include <cstdio>
 
+constexpr size_t warp_size = 32;
+
 template <typename scalar>
 scalar* initialize_device_vector(size_t N, const scalar* h_vec) {
   scalar* d_vec = nullptr;
@@ -49,6 +51,40 @@ __global__ void deviceNaiveMatMul(size_t N,
   }
 }
 
+__global__ void deviceSharedMemMatMul(size_t N,
+  const int* A, const int* B, int* C) {
+  /*
+   * Assuming row major
+   * threadIdx.x is threadIdx in warp
+   * threadIdx.y is warpIdx in block
+   */
+  // global indices
+  size_t warp_idx = blockIdx.x * blockDim.y + threadIdx.y;
+  size_t thread_idx = blockIdx.x * blockDim.x * blockDim.y
+    + threadIdx.y * blockDim.x + threadIdx.x;
+
+  size_t row = thread_idx / N;
+  size_t col = thread_idx - (row*N);
+
+  __shared__ int bA[warp_size][warp_size];
+  __shared__ int bB[warp_size][warp_size];
+
+  size_t numBlocks = (N  + (warp_size - 1))/ warp_size;
+
+  int Cij = 0;
+  for (size_t k = 0; k < numBlocks; ++k) {
+    // Load mem
+    bA[threadIdx.x][threadIdx.y] = A[row * N + (k * warp_size) + threadIdx.y];
+    bB[threadIdx.x][threadIdx.y] = B[((k * warp_size) + threadIdx.x) * N + col];
+    __syncthreads();
+    // block mul
+    for (size_t w = 0; w < warp_size; ++w) {
+      Cij += bA[threadIdx.x][w] * bB[w][threadIdx.y];
+    }
+  }
+  C[row*N + col] = Cij;
+}
+
 
 template <typename scalar>
 bool vectorsEqual(scalar* A, scalar* B, int length)
@@ -88,12 +124,12 @@ int main() {
 
   // device
   size_t block_size = 1024;
-  size_t warp_size = 32;
   dim3 blockDim(warp_size, block_size / warp_size);
   size_t grid_size = (N*N + (block_size - 1)) / block_size;
   dim3 gridDim(grid_size);
 
-  deviceNaiveMatMul<<<gridDim, blockDim>>>(N, d_A, d_B, d_C);
+  // deviceNaiveMatMul<<<gridDim, blockDim>>>(N, d_A, d_B, d_C);
+  deviceSharedMemMatMul<<<gridDim, blockDim>>>(N, d_A, d_B, d_C);
   cudaMemcpy(h_C, d_C, N*N*sizeof(int), cudaMemcpyDeviceToHost);
 
   // Confirm that CPU and GPU got the same answer
