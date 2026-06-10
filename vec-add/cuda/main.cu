@@ -2,8 +2,9 @@
 #include <cstdio>
 
 template <typename scalar>
-__global__ void vecRedAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
-  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+__global__ void vecAdd(const scalar* A, const scalar* B, scalar* C, size_t N) {
+  /* Assuming 1D grid and 1D block*/
+  size_t idx = blockDim.x * blockIdx.x + threadIdx.x;
   if (idx < N) {
     C[idx] = A[idx] + B[idx];
   }
@@ -61,7 +62,7 @@ int main() {
   size_t block_size = 256;
   size_t grid_size = (N + (block_size - 1)) / block_size;
 
-  vecRedAdd<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
+  vecAdd<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
   cudaMemcpy(h_C, d_C, sizeof(float)*N, cudaMemcpyDeviceToHost);
 
   hostVecRedAdd(h_A, h_B, h_C_test, N);
